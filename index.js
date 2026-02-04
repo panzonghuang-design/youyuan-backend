@@ -846,17 +846,18 @@ app.get('/api/chats/:id/messages', async (req, res) => {
         const nextBeforeId = cached.value?.next_before_id || null;
         const markRead = req.query.mark_read !== '0';
         if (markRead) {
+          const readAt = new Date().toISOString();
           Promise.resolve()
             .then(async () => {
               await pool.query(
-                'update messages set read_at = now() where chat_id = $1 and sender_id <> $2 and read_at is null',
-                [chatId, userId]
+                'update messages set read_at = $3 where chat_id = $1 and sender_id <> $2 and read_at is null',
+                [chatId, userId, readAt]
               );
               await pool.query(
                 'update chat_participants set unread_count = 0 where chat_id = $1 and user_id = $2',
                 [chatId, userId]
               );
-              emitToUsers(participantIds, 'messages:read', { chat_id: chatId, reader_id: userId });
+              emitToUsers(participantIds, 'messages:read', { chat_id: chatId, reader_id: userId, read_at: readAt });
               markChatListRead(userId, chatId);
             })
             .catch(() => {});
@@ -879,17 +880,18 @@ app.get('/api/chats/:id/messages', async (req, res) => {
     const ordered = sliced.reverse();
     const markRead = req.query.mark_read !== '0';
     if (markRead) {
+      const readAt = new Date().toISOString();
       Promise.resolve()
         .then(async () => {
           await pool.query(
-            'update messages set read_at = now() where chat_id = $1 and sender_id <> $2 and read_at is null',
-            [chatId, userId]
+            'update messages set read_at = $3 where chat_id = $1 and sender_id <> $2 and read_at is null',
+            [chatId, userId, readAt]
           );
           await pool.query(
             'update chat_participants set unread_count = 0 where chat_id = $1 and user_id = $2',
             [chatId, userId]
           );
-          emitToUsers(participantIds, 'messages:read', { chat_id: chatId, reader_id: userId });
+          emitToUsers(participantIds, 'messages:read', { chat_id: chatId, reader_id: userId, read_at: readAt });
           markChatListRead(userId, chatId);
         })
         .catch(() => {});
@@ -916,16 +918,17 @@ app.post('/api/chats/:id/read', async (req, res) => {
       [chatId, userId]
     );
     if (!allowed.rows.length) return res.status(403).json({ error: '无权限' });
+    const readAt = new Date().toISOString();
     const result = await pool.query(
-      'update messages set read_at = now() where chat_id = $1 and sender_id <> $2 and read_at is null',
-      [chatId, userId]
+      'update messages set read_at = $3 where chat_id = $1 and sender_id <> $2 and read_at is null',
+      [chatId, userId, readAt]
     );
     await pool.query(
       'update chat_participants set unread_count = 0 where chat_id = $1 and user_id = $2',
       [chatId, userId]
     );
     const ids = await getChatParticipants(chatId);
-    emitToUsers(ids, 'messages:read', { chat_id: chatId, reader_id: userId });
+    emitToUsers(ids, 'messages:read', { chat_id: chatId, reader_id: userId, read_at: readAt });
     markChatListRead(userId, chatId);
     res.json({ updated: result.rowCount || 0 });
   } catch (err) {
