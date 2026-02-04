@@ -532,7 +532,7 @@ app.get('/api/match', async (req, res) => {
       `;
       let { rows } = await client.query(baseSql.replace('%EXTRA%', 'and u.id > $2'), [requesterId, lastUserId]);
       if (!rows.length) {
-        rows = (await client.query(baseSql.replace('%EXTRA%', ''), [requesterId, lastUserId])).rows;
+        rows = (await client.query(baseSql.replace('%EXTRA%', ''), [requesterId])).rows;
       }
       if (!rows.length) {
         await client.query("rollback");
