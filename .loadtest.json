@@ -1,0 +1,12 @@
+{
+  "a": {
+    "phoneCode": "+852",
+    "phone": "9602164810",
+    "password": "Loadtest@12345"
+  },
+  "b": {
+    "phoneCode": "+852",
+    "phone": "9922767447",
+    "password": "Loadtest@12345"
+  }
+}
