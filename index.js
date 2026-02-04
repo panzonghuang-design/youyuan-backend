@@ -50,6 +50,8 @@ const chatListCache = new Map();
 const messagesCache = new Map();
 const chatParticipantsCache = new Map();
 const chatStatusCache = new Map();
+const onlineUsers = new Map();
+const lastSeenMap = new Map();
 
 function getCachedEntry(map, key) {
   const hit = map.get(key);
@@ -154,6 +156,36 @@ async function getChatStatus(chatId) {
 
 function setChatStatusCache(chatId, status) {
   setCacheEntry(chatStatusCache, String(chatId), status, CHAT_STATUS_TTL);
+}
+
+function isUserOnline(userId) {
+  return onlineUsers.has(userId);
+}
+
+function touchOnline(userId) {
+  const count = (onlineUsers.get(userId) || 0) + 1;
+  onlineUsers.set(userId, count);
+  return count;
+}
+
+function touchOffline(userId) {
+  const count = (onlineUsers.get(userId) || 0) - 1;
+  if (count <= 0) {
+    onlineUsers.delete(userId);
+    lastSeenMap.set(userId, Date.now());
+    return 0;
+  }
+  onlineUsers.set(userId, count);
+  return count;
+}
+
+function emitPresence(userId, online) {
+  if (!io || !userId) return;
+  io.to(`presence:${userId}`).emit('presence:update', {
+    user_id: userId,
+    online,
+    last_seen: online ? null : lastSeenMap.get(userId) || null,
+  });
 }
 
 function acquireWriteSlot() {
@@ -1476,7 +1508,34 @@ io.use(async (socket, next) => {
 
 io.on('connection', (socket) => {
   const userId = socket.data.userId;
-  if (userId) socket.join(`user:${userId}`);
+  if (userId) {
+    socket.join(`user:${userId}`);
+    const count = touchOnline(userId);
+    if (count === 1) emitPresence(userId, true);
+  }
+
+  socket.on('presence:watch', (payload = {}) => {
+    const targetId = Number(payload.user_id);
+    if (!Number.isFinite(targetId)) return;
+    socket.join(`presence:${targetId}`);
+    socket.emit('presence:update', {
+      user_id: targetId,
+      online: isUserOnline(targetId),
+      last_seen: lastSeenMap.get(targetId) || null,
+    });
+  });
+
+  socket.on('presence:unwatch', (payload = {}) => {
+    const targetId = Number(payload.user_id);
+    if (!Number.isFinite(targetId)) return;
+    socket.leave(`presence:${targetId}`);
+  });
+
+  socket.on('disconnect', () => {
+    if (!userId) return;
+    const count = touchOffline(userId);
+    if (count === 0) emitPresence(userId, false);
+  });
 });
 
 async function setupRedisAdapter() {
